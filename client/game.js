@@ -35,6 +35,8 @@ const IMAGE_LIST = [
   ['jumpSheet',    'assets/volt/volt_jump_sheet.png'],
   ['slideSheet',   'assets/volt/volt_slide_sheet.png'],
   ['stumbleSheet', 'assets/volt/volt_stumble_sheet.png'],
+  ['flameSheet',   'assets/volt/flame_sheet.png'],
+  ['faces6Sheet',  'assets/volt/volt_faces6_sheet.png'],
   ['cheerSheet',   'assets/volt/volt_cheer_sheet.png'],
   // --- Biome: Kristal Mağara ---
   ['caveBg',    'assets/biome/cave/bg.png'],
@@ -82,7 +84,7 @@ function loadImages(cb) {
 
 /* ---------- RUN SHEET (12 karelik koşu döngüsü) ----------
    tools/pack_run_sheet.py üretimi — detaylar: docs/volt_run_sheet.json */
-const SHEET = { cols: 4, rows: 3, count: 12, fw: 244, fh: 375, fpsBase: 13 };
+const SHEET = { cols: 10, rows: 1, count: 20, fw: 207, fh: 271, fpsBase: 21.7 };  // 20 kare = 12'nin iki katı akıcılık
 
 // Aksiyon sheet'leri: her durum artık gerçek kare animasyon (statik sticker YOK)
 const ACTION_SHEETS = {
@@ -310,7 +312,7 @@ const G = {
   patternCount: 0,
   nextPatternDist: 60,
   idleFunTimer: 16,
-  volt: { lane: 1, x: 0, state: 'run', prevState: null, blend: 0, stateT: 0, jumpT: 0, targetLane: 1, bob: 0, runPhase: 0 },
+  volt: { lane: 1, x: 0, state: 'run', prevState: null, blend: 0, stateT: 0, jumpT: 0, targetLane: 1, bob: 0, runPhase: 0, flamePhase: 0, glanceFace: null, scareQueue: false, laughQueue: false },
   trailTimer: 0, saveTimer: 0,
   newRecord: false,
   // --- Dokunmatik bonus + canlılık (v8) ---
@@ -319,7 +321,7 @@ const G = {
   comboMultTimer: 0,   // takla sonrası x2 kıvılcım
   driftT: 0,           // takla animasyon süresi
   shake: 0,            // kamera sarsıntısı (stumble)
-  tapCd: 0, magnetCd: 0, lastTapTime: 0,
+  tapCd: 0, magnetCd: 0, lastTapTime: 0, glanceCd: 0,
   biome: BIOMES[0],    // aktif biome (TASARIM 4.4)
   portalT: 0,          // biome geçiş portal flaşı (1.5 sn)
 };
@@ -456,7 +458,55 @@ function doStumble() {
   addParticle({ x: v.x, y: voltY - 110, vx: 0, vy: -40, life: 1.0, age: 0, size: 22, color: '#fff', type: 'text', text: 'Ay! 😅' });
 }
 function doCheer() { setVoltState('cheer'); }
-function doGlance() { if (G.volt.state === 'run') setVoltState('lookback'); }
+function doGlance(face) {
+  if (G.volt.state !== 'run' || G.glanceCd > 0) return;
+  G.glanceCd = 3;
+  G.volt.glanceFace = face || null;   // null = klasik şaşkın bakış
+  setVoltState('lookback');
+}
+
+/* Yüz karesi çizimi (faces6 sheet): bakış anlarında duygu yüzü */
+function drawFaceFrame(idx, alpha) {
+  const sheet = IMAGES.faces6Sheet;
+  const v = G.volt;
+  if (!sheet || !sheet.width) return;
+  const fw = sheet.width / 6, fh = sheet.height;
+  const scale = (H * 0.17) / fh;
+  const dw = fw * scale, dh = fh * scale;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(v.x, voltY + 10);
+  ctx.rotate(Math.sin(v.stateT * 10) * 0.05);
+  ctx.drawImage(sheet, idx * fw, 0, fw, fh, -dw / 2, -dh, dw, dh);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/* Kuyruk alevi overlay: sekonder motion (hızla büyür, drift'te savrulur, zıplamada sarkar) */
+function drawFlame() {
+  const sheet = IMAGES.flameSheet;
+  if (!sheet || !sheet.width) return;
+  const v = G.volt;
+  const spd = clamp(curSpeed() / 14, 0.6, 1.6);
+  const fi = Math.floor(v.flamePhase) % 3;
+  const fw = sheet.width / 3, fh = sheet.height;
+  const h = H * 0.062 * (0.8 + spd * 0.35);
+  const w = fw * h / fh;
+  const jumping = v.state === 'jump';
+  const jt = Math.min(v.jumpT || 0, 1);
+  const laneLean = clamp((v.targetLane - v.lane) * -0.18, -0.25, 0.25);
+  const x = v.x - w * 0.55 - 6;
+  const y = voltY + 2 - h * 0.55 + (jumping ? Math.sin(jt * Math.PI) * 12 : 0);
+  const rot = -laneLean * 1.4 + (jumping ? Math.sin(jt * Math.PI) * 0.3 : 0);
+  ctx.save();
+  ctx.globalAlpha = 0.95;
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  if (G.burstTimer > 0) { ctx.shadowColor = '#ff9f43'; ctx.shadowBlur = 18; }
+  ctx.drawImage(sheet, fi * fw, 0, fw, fh, -w / 2, -h / 2, w, h);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
 
 /* ---------- Oto-pilot ---------- */
 function autopilot(dt) {
@@ -506,14 +556,15 @@ function checkCollisions() {
       G.combo++; G.comboTimer = 2;
       Sfx.play('collect');
       burstParticles(laneX(1, e.lane), voltY - 60 - (e.lift || 0), '#ffe27a', 6, 80);
+      if (G.combo > 0 && G.combo % 10 === 0) doGlance('laugh');
       if (G.combo > 0 && G.combo % 5 === 0)
         addParticle({ x: v.x, y: voltY - 130, vx: 0, vy: -30, life: 0.9, age: 0, size: 18, color: '#7ef9ff', type: 'text', text: 'KOMBO x' + G.combo + '! ✨' });
       continue;
     }
-    if (e.type === 'fence') { if (jumping) { e.taken = true; } else if (e.z > 1.0) doStumble(); continue; }
-    if (e.type === 'branch') { if (sliding) { e.taken = true; } else if (e.z > 1.0) doStumble(); continue; }
+    if (e.type === 'fence') { if (jumping) { e.taken = true; v.scareQueue = true; } else if (e.z > 1.0) doStumble(); continue; }
+    if (e.type === 'branch') { if (sliding) { e.taken = true; v.laughQueue = true; } else if (e.z > 1.0) doStumble(); continue; }
     if (JUMP_SOLIDS.includes(e.type)) {
-      if (jumping && v.jumpT > 0.25 && v.jumpT < 0.85) { e.taken = true; }
+      if (jumping && v.jumpT > 0.25 && v.jumpT < 0.85) { e.taken = true; v.scareQueue = true; }
       else if (e.z > 1.0) doStumble();
       continue;
     }
@@ -560,24 +611,26 @@ function update(dt) {
   if (G.driftT > 0) G.driftT -= dt;
   if (G.tapCd > 0) G.tapCd -= dt;
   if (G.magnetCd > 0) G.magnetCd -= dt;
+  if (G.glanceCd > 0) G.glanceCd -= dt;
   if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 1.3);
   if (G.portalT > 0) G.portalT = Math.max(0, G.portalT - dt);
 
   const v = G.volt;
   v.lane = lerp(v.lane, v.targetLane, clamp(dt * 6.5, 0, 1));
   v.stateT += dt;
-  if (v.state === 'jump') { v.jumpT = v.stateT / 0.55; if (v.stateT >= 0.55) setVoltState('run'); }
-  else if (v.state === 'slide' && v.stateT >= 0.6) setVoltState('run');
+  if (v.state === 'jump') { v.jumpT = v.stateT / 0.55; if (v.stateT >= 0.55) { setVoltState('run'); if (v.scareQueue) { v.scareQueue = false; doGlance('scared'); } } }
+  else if (v.state === 'slide' && v.stateT >= 0.6) { setVoltState('run'); if (v.laughQueue) { v.laughQueue = false; doGlance('laugh'); } }
   else if (v.state === 'stumble' && v.stateT >= 0.8) setVoltState('lookback');
-  else if (v.state === 'lookback' && v.stateT >= 0.45) setVoltState('run');
+  else if (v.state === 'lookback' && v.stateT >= 0.45) { v.glanceFace = null; setVoltState('run'); }
   else if (v.state === 'cheer' && v.stateT >= 1.2) setVoltState('run');
   if (v.blend > 0) v.blend = Math.max(0, v.blend - dt / 0.13);   // 130ms cross-fade
   v.bob = Math.sin(G.time * 9) * 5;   // statik pozlarda minik canlılık (koşu bob'u rig'te faz-senkron)
   v.runPhase += dt;
+  v.flamePhase += dt * (10 + spd * 2.2);   // alev titreme hızı (hızla artar)
   v.x = laneX(1, v.lane);
 
   // ADIM OLAYI: bacak fazı ekstremumunda (cos sıfır geçişi) toz pufu + ayak sesi
-  const stepFreq = clamp(SHEET.fpsBase * clamp(curSpeed() / 14, 0.6, 1.6), 24, 32);
+  const stepFreq = clamp(SHEET.fpsBase * clamp(curSpeed() / 14, 0.6, 1.6), 24, 35) * Math.PI / 10;   // kos-radyan: temas = fps/10
   const cNow = Math.cos(v.runPhase * stepFreq);
   if (v.state === 'run' && v.prevC !== undefined && ((cNow >= 0) !== (v.prevC >= 0))) {
     burstParticles(v.x + (cNow >= 0 ? -14 : 14), voltY + 2, '#d9c9a8', 2, 30);
@@ -614,6 +667,10 @@ function update(dt) {
   G.trailTimer -= dt;
   if (G.trailTimer <= 0) {
     G.trailTimer = 0.05;
+    if (Math.random() < 0.55)   // kuyruk alevinden kor/ember izi
+      addParticle({ x: v.x - 26 + rand(-6, 6), y: voltY - 26 + rand(-8, 8),
+        vx: rand(-46, -18), vy: rand(-14, 10), life: rand(0.2, 0.45), age: 0,
+        size: rand(2, 4.5), color: pick(['#ff9f43', '#ffd166', '#ff6b6b']) });
     const hue = G.burstTimer > 0 ? (G.time * 300) % 360 : 45;
     addParticle({ x: v.x + rand(-10, 10), y: voltY - 14 + rand(-4, 4),
       vx: rand(-30, -10), vy: rand(-16, 6), life: rand(0.25, 0.5), age: 0,
@@ -796,14 +853,14 @@ function drawRunFrame(px, baseY, alpha) {
   const sheet = IMAGES.runSheet;
   if (!sheet || !sheet.width) { ctx.globalAlpha = alpha; ctx.globalAlpha = 1; return; }
   const spd = clamp(curSpeed() / 14, 0.6, 1.6);
-  const fps = clamp(SHEET.fpsBase * spd, 24, 32);
+  const fps = clamp(SHEET.fpsBase * spd, 24, 35);
   const fi = Math.floor(v.runPhase * fps) % SHEET.count;
   const col = fi % SHEET.cols, row = (fi / SHEET.cols) | 0;
   const sx = col * SHEET.fw, sy = row * SHEET.fh;
 
   // adım fazıyla senkron squash&stretch (S: faz; vuruş anında çökme)
   const S = Math.sin(v.runPhase * fps);
-  const dispH = H * 0.165 * (1 - Math.abs(S) * 0.05);
+  const dispH = H * 0.175 * (1 - Math.abs(S) * 0.05);
   const dispW = dispH * (SHEET.fw / SHEET.fh);
   let laneLean = clamp((v.targetLane - v.lane) * -0.18, -0.25, 0.25);
   if (G.driftT > 0) laneLean += Math.sin((1 - G.driftT / 0.45) * Math.PI) * 0.9;
@@ -842,6 +899,7 @@ function drawPose(state, alpha) {
     img = IMAGES.faceDizzy; rot = Math.sin(v.stateT * 26) * 0.15; hFrac = 0.17;
     spin = 1;   // kameraya dönüş hissi (scaleX animasyonu)
   } else if (state === 'lookback') {
+    if (v.glanceFace) { drawFaceFrame({ love: 4, laugh: 1, scared: 5 }[v.glanceFace] || 3, alpha); ctx.globalAlpha = 1; return; }
     img = IMAGES.faceSurprised; rot = Math.sin(v.stateT * 10) * 0.05;
     spin = 1;
   } else if (state === 'cheer') {
@@ -876,6 +934,7 @@ function drawPose(state, alpha) {
 
 function drawVolt() {
   const v = G.volt;
+  drawFlame();   // sekonder motion: alev kuyruk (karakterin ARKASINDA)
   if (v.blend > 0 && v.prevState && v.prevState !== v.state) {
     drawPose(v.prevState, v.blend);          // eski poz soluyor
     drawPose(v.state, 1 - v.blend);          // yeni poz beliriyor
@@ -1035,6 +1094,7 @@ function bonusTap(x, y) {
 function bonusDoubleTap() {
   if (!G.running) return;
   G.heartTimer = 6;
+  doGlance('love');
   burstParticles(G.volt.x, voltY - 80, '#ff8fa3', 10, 110);
   for (let i = 0; i < 4; i++)
     addParticle({ x: G.volt.x + rand(-30, 30), y: voltY - 100 - i * 16, vx: rand(-14, 14), vy: rand(-40, -14), life: rand(0.5, 0.9), age: 0, size: rand(14, 20), color: '#ff8fa3', type: 'text', text: '❤️' });

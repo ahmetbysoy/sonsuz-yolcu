@@ -20,6 +20,8 @@ JOBS = [
     ("volt_slide_grid_raw.png",   "volt_slide_sheet",   5, 5, "bottom"),
     ("volt_stumble_grid_raw.png", "volt_stumble_sheet", 5, 5, "bottom"),
     ("volt_cheer_grid_raw.png",   "volt_cheer_sheet",   6, 6, "bottom"),
+    ("volt_faces6_grid_raw.png",  "volt_faces6_sheet",  6, 6, "bottom"),
+    ("flame_flicker_raw.png",     "flame_sheet",        3, 3, "bottom"),
 ]
 WHITE_T = 236   # >= bu değer beyaz sayılır
 PAD_RATIO = 0.25  # hücre üstü boşluk (karakter yüksekliğinin katı)
