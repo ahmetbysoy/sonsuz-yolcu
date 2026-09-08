@@ -1,0 +1,28 @@
+# SONSUZ YOLCU — .gitignore
+
+# Bağımlılıklar (hiç yok ama garanti olsun)
+node_modules/
+
+# Çalışma zamanı verisi (sunucu db'si — repoya gitmez!)
+server/data/*.json
+server/data/*.tmp
+
+# Kenney ZIP'leri (içerikleri zaten assets/ altında açılmış halde var)
+assets/audio/kenney/*.zip
+assets/client/ui/*.zip
+
+# Sistem / editör artıkları
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Loglar
+*.log
+
+# Ortam/değişken dosyaları (sır olabilir)
+.env
+.env.*
+.vercel

@@ -1,0 +1,10 @@
+# Vercel'e sadece client + api gider (kök-anchored desenler!)
+# DİKKAT: "/" ile başlamayan desen HER seviyedeki klasörü yakalar
+# (önceki sürüm "assets/" yüzünden client/assets/'ı da dışlamıştı → 404 bug)
+/assets/
+/docs/
+/tools/
+/server/
+/scripts/
+/uploads/
+.git/

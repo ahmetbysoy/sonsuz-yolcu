@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Sonsuz Yolcu ⚡</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div id="bonusHint">👆 çift dokun: ❤️ hız &nbsp;·&nbsp; 👉 kaydır: takla ✨×2 &nbsp;·&nbsp; ✊ basılı tut: 🧲 mıknatıs</div>
+  <div class="hud-row">
+    <div class="chip" id="chipDist">⚡ <b>0</b> m</div>
+    <div class="chip" id="chipSpark">✨ <b>0</b></div>
+    <button class="round-btn" id="btnMute" title="Sesi aç/kapat">🔊</button>
+  </div>
+  <div id="lvlwrap">
+    <span id="lvlLabel">SV.1</span>
+    <div id="lvlbar"><div id="lvlfill"></div></div>
+    <span id="spdLabel">29 km/s</span>
+  </div>
+</div>
+
+<!-- Büyük banner (seviye / rekor / olay) -->
+<div id="banner"></div>
+
+<!-- Açılış ekranı -->
+<div id="startOverlay">
+  <div class="start-card">
+    <img id="voltHero" src="assets/volt/volt_main.png" alt="VOLT">
+    <h1>SONSUZ YOLCU</h1>
+    <p class="tagline">VOLT durursa dünya kararır. Sen izledikçe daha cesur koşar! ⚡</p>
+    <p class="record" id="recordLine"></p>
+    <button id="btnStart">BAŞLA</button>
+    <p class="hint">Oyun kendi kendine oynar — sen sadece izle ve keyfine bak ✨</p>
+  </div>
+</div>
+
+<!-- Uyku raporu ("Sen yokken...") -->
+<div id="sleepOverlay" class="hidden">
+  <div class="start-card">
+    <div class="zzz">💤</div>
+    <h2>Sen yokken...</h2>
+    <p>VOLT rüya hızında <b><span id="sleptM">0</span> m</b> süzüldü<br>
+       <span id="sleptTime" class="slept-sub"></span></p>
+    <button id="btnSleepOk">YOLA DEVAM</button>
+    <p class="hint">Uyku kazancı: sen yokken %10 hızla, en fazla 8 saat birikir</p>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
