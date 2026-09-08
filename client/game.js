@@ -311,11 +311,11 @@ const TRINKETS = [
   { id: 'taci',    emoji: '👑', name: 'Bulut Tacı' },
 ];
 const EVENTS = [
-  { id: 'gold',  w: 0.28, icon: '⭐', name: 'ALTIN DAKİKA',    msg: 'kıvılcımlar ×2!', dur: 60 },
-  { id: 'rain',  w: 0.24, icon: '🌠', name: 'YILDIZ YAĞMURU',  msg: 'gökten kıvılcımlar!', dur: 10 },
-  { id: 'box',   w: 0.20, icon: '🎁', name: 'UÇAN KUTU',       msg: 'önce kim alır?', dur: 12 },
-  { id: 'combo', w: 0.16, icon: '🔥', name: 'KOMBO ÇILGINLIĞI', msg: 'kombo düşmez!', dur: 15 },
-  { id: 'slow',  w: 0.12, icon: '🐌', name: 'AĞIR ZAMAN',      msg: 'her şey yavaşladı…', dur: 6 },
+  { id: 'gold',  w: 0.28, icon: '⭐', name: 'ALTIN DAKİKA',    msg: 'kıvılcımlar ×2!', dur: 60, say: 'Altın dakika! Kıvılcımlar iki katı! Hadi bakalım!' },
+  { id: 'rain',  w: 0.24, icon: '🌠', name: 'YILDIZ YAĞMURU',  msg: 'gökten kıvılcımlar!', dur: 10, say: 'Yıldız yağmuru! Yakala yakala bilirsin!' },
+  { id: 'box',   w: 0.20, icon: '🎁', name: 'UÇAN KUTU',       msg: 'önce kim alır?', dur: 12, say: 'Uçan kutu gördüm! İçinde sürpriz var!' },
+  { id: 'combo', w: 0.16, icon: '🔥', name: 'KOMBO ÇILGINLIĞI', msg: 'kombo düşmez!', dur: 15, say: 'Kombo çılgınlığı! Zincir kopmak yok!' },
+  { id: 'slow',  w: 0.12, icon: '🐌', name: 'AĞIR ZAMAN',      msg: 'her şey yavaşladı…', dur: 6, say: 'Aa, zaman yavaşladı... Ne kadar da sakin.' },
 ];
 function trinketById(id) { return TRINKETS.find(t => t.id === id); }
 
@@ -481,6 +481,7 @@ function doStumble() {
   if (G.volt.state === 'stumble' || G.volt.state === 'lookback') return;
   setVoltState('stumble');
   G.stumbleMult = 0.72; G.combo = 0; G.shake = 0.45;
+  VoltSpeak.say('Ay! Olur böyle şeyler, devam!');
   Sfx.play('stumble');
   const v = G.volt;
   burstParticles(v.x, voltY - 40, '#ffd166', 14, 120);
@@ -492,6 +493,12 @@ function doGlance(face) {
   G.glanceCd = 3;
   G.volt.glanceFace = face || null;   // null = klasik şaşkın bakış
   setVoltState('lookback');
+  // LOOKBACK SENKRONU: kameraya döndüğünde duygu repliği (analiz md.6)
+  VoltSpeak.say({
+    love: 'Seni seviyorum! Kalp hızına geçtik!',
+    laugh: 'Ha ha ha! Çok kolay geliyor, takip et beni!',
+    scared: 'İyy! Az kalsın! Ama atlattık işte!'
+  }[face] || 'Arkanı bana bırak, ben buradayım!');
 }
 
 /* Yüz karesi çizimi (faces6 sheet): bakış anlarında duygu yüzü */
@@ -611,6 +618,7 @@ function checkCollisions() {
       if (isNew) {
         showBanner('🧺 Yeni Hatıra: ' + tr.emoji + ' ' + tr.name + '!');
         burstParticles(v.x, voltY - 80, '#7ef9ff', 22, 170);
+        VoltSpeak.say('Yeni hatıra! ' + tr.name + '! Koleksiyona eklendi!', { prio: true });
         Sfx.levelUp();
       } else {
         G.sparks += 15;
@@ -643,16 +651,26 @@ function updateProgression(distDelta) {
       G.biome = nb; G.portalT = 1.5;
       setTimeout(() => showBanner(nb.icon + ' ' + nb.name.toUpperCase() + '!'), 1700);
       setTimeout(() => burstParticles(G.volt.x, voltY - 90, '#7ef9ff', 24, 170), 1700);
+      setTimeout(() => VoltSpeak.say({
+        cave: 'Vay canına! Kristal Mağara! Işıltılara dikkat, hepsi çok parlak!',
+        city: 'Yukarı bak! Bulut Şehri' + "'" + 'ne koşuyoruz! Havalı, değil mi?'
+      }[nb.id] || (nb.icon + ' ' + nb.name), { prio: true }), 1900);
       Sfx.levelUp();
     }
     if (G.level % 10 === 0) {
       G.burstTimer = 6; Sfx.burst();
-      setTimeout(() => showBanner('IŞIK PATLAMASI! 🌈', 'rainbow'), 1700);
+      setTimeout(() => {
+        showBanner('IŞIK PATLAMASI! 🌈', 'rainbow');
+        VoltSpeak.say('Işık Patlaması! Şimdi süper hızlıyız!', { prio: true });
+      }, 1700);
     }
   }
   if (!G.newRecord && Save.data.best > 0 && G.distance + Save.data.totalDist > Save.data.best) {
     G.newRecord = true;
-    setTimeout(() => showBanner('YENİ REKOR! 🏆'), 1200);
+    setTimeout(() => {
+      showBanner('YENİ REKOR! 🏆');
+      VoltSpeak.say('Rekoru kırıyoruz! Daha da hızlı!', { prio: true });
+    }, 1200);
   }
 }
 
@@ -671,6 +689,7 @@ function update(dt) {
       for (const e of EVENTS) { r -= e.w; if (r <= 0) { ev = e; break; } }
       G.activeEvent = { id: ev.id, icon: ev.icon, name: ev.name, msg: ev.msg, t: ev.dur, dur: ev.dur };
       showBanner(ev.icon + ' ' + ev.name + '! ' + ev.msg);
+      VoltSpeak.say(ev.say || ev.name);
       Sfx.play('levelUp');
       if (ev.id === 'box')
         G.entities.push({ type: 'box', lane: (Math.random() * 3) | 0, z: 0.02 });
@@ -1179,6 +1198,8 @@ function startGame() {
   document.getElementById('hud').classList.remove('hidden');
   started = true;
   Sfx.init();
+  VoltSpeak.init();
+  VoltSpeak.say('Kemerleri bağla! Kıvılcım peşindeyiz!', { prio: true });
   if (Sfx.ctx && Sfx.ctx.state === 'suspended') Sfx.ctx.resume();
   Sfx.play('click');
 
@@ -1201,6 +1222,7 @@ document.getElementById('btnStart').addEventListener('click', startGame);
 document.getElementById('btnMute').addEventListener('click', () => {
   Sfx.muted = !Sfx.muted;
   document.getElementById('btnMute').textContent = Sfx.muted ? '🔇' : '🔊';
+  if (Sfx.muted) { try { speechSynthesis.cancel(); } catch (e) {} }
 });
 window.addEventListener('keydown', e => { if (e.key === 'Enter' && !G.running && !started) startGame(); });
 document.addEventListener('visibilitychange', () => {
@@ -1221,6 +1243,38 @@ window.addEventListener('pagehide', () => {
   } catch (e) {}
 });
 window.addEventListener('beforeunload', commitSave);
+
+/* ---------- VOLT'un sesi (TTS) — nazik/komik anonslar, susturma 1 tık ---------- */
+const VoltSpeak = {
+  supported: false, voice: null, lastAt: 0,
+  init() {
+    try {
+      this.supported = typeof speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined';
+      if (this.supported) this.pickVoice();
+    } catch (e) { this.supported = false; }
+  },
+  pickVoice() {
+    try {
+      const pick = () => { try { return (speechSynthesis.getVoices() || []).find(v => /^tr/i.test(v.lang)) || null; } catch (e) { return null; } };
+      this.voice = pick();
+      if (!this.voice && typeof speechSynthesis.addEventListener === 'function')
+        speechSynthesis.addEventListener('voiceschanged', () => { this.voice = pick(); });
+    } catch (e) {}
+  },
+  say(text, opts) {
+    if (!this.supported || Sfx.muted || !text) return;
+    const now = performance.now();
+    if (!(opts && opts.prio) && now - this.lastAt < 7000) return;   // spam koruması
+    if (opts && opts.prio) { try { speechSynthesis.cancel(); } catch (e) {} }
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      if (this.voice) u.voice = this.voice;
+      u.lang = 'tr-TR'; u.pitch = 1.35; u.rate = 1.02; u.volume = 0.95;
+      this.lastAt = now;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+};
 
 /* ---------- Dokunmatik bonus (TASARIM 4.2: otomatik oyun + dokunuş BONUS) ---------- */
 function bonusTap(x, y) {
@@ -1295,6 +1349,41 @@ function bonusMagnet() {
   el.addEventListener('mouseup', e => {
     const [wx, wy] = toWorld(e.clientX, e.clientY, el);
     finish(wx, wy);
+  });
+})();
+
+/* ---------- Sesli komut (TASARIM 4.2 — destekleyen tarayıcılarda best-effort) ---------- */
+(function initVoiceCmd() {
+  try {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (typeof SR !== 'function') return;
+    const rec = new SR();
+    rec.lang = 'tr-TR'; rec.continuous = true; rec.interimResults = false; rec.maxAlternatives = 1;
+    rec.onresult = e => {
+      const t = (e.results[e.results.length - 1][0].transcript || '').toLowerCase();
+      if (/zıpla|zipla|hop/.test(t)) doJump();
+      else if (/hızlan|hizlan|koş|kos/.test(t)) bonusDoubleTap();
+      else if (/dans|kutla/.test(t)) doCheer();
+      else if (/dikkat|bak/.test(t)) doGlance();
+    };
+    rec.onerror = () => {};
+    rec.onend = () => { setTimeout(() => { try { rec.start(); } catch (e) {} }, 3000); };
+    rec.start();
+  } catch (e) {}
+})();
+
+/* Fallback butonlar: sesli komutu desteklemeyen cihazlar için (iOS/Telegram-desktop) */
+(function initCmdButtons() {
+  const row = (typeof document.getElementById === 'function') ? document.getElementById('cmdRow') : null;
+  if (!row || !row.addEventListener) return;
+  row.addEventListener('click', e => {
+    const b = e.target && e.target.closest ? e.target.closest('.cmd-btn') : null;
+    if (!b || !G.running) return;
+    Sfx.play('click');
+    const c = b.dataset ? b.dataset.cmd : null;
+    if (c === 'jump') doJump();
+    else if (c === 'fast') bonusDoubleTap();
+    else if (c === 'dance') doCheer();
   });
 })();
 
