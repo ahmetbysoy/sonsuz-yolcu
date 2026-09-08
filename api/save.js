@@ -31,6 +31,10 @@ module.exports = async (req, res) => {
   u.best = Math.max(u.best, u.totalDist);
   u.level = store.clampNum(b.level, 1, 10000) | 0;
   u.lastSpeed = store.clampNum(b.speed, 2, 40);
+  // 🧺 koleksiyon MERGE — asla sıfırlanmaz (TASARIM değişmezi)
+  if (b.collection && typeof b.collection === 'object' && !Array.isArray(b.collection)) {
+    u.collection = Object.assign({}, u.collection || {}, b.collection);
+  }
   u.lastSeen = now;
   u.updatedAt = now;
   await store.persistUser(uid, u);

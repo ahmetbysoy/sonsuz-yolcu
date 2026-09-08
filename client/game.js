@@ -167,7 +167,7 @@ const Sfx = {
 
 /* ---------- Kayıt (yerel) ---------- */
 const Save = {
-  data: { totalDist: 0, sparks: 0, best: 0 },
+  data: { totalDist: 0, sparks: 0, best: 0, collection: {} },
   load() { try { const raw = localStorage.getItem('sy_save1'); if (raw) Object.assign(this.data, JSON.parse(raw)); } catch (e) {} },
   write() { try { localStorage.setItem('sy_save1', JSON.stringify(this.data)); } catch (e) {} }
 };
@@ -214,12 +214,12 @@ const Net = {
     }
     return null;
   },
-  async save(total, sparks) {
+  async save(total, sparks, collection) {
     if (!this.online) return null;
     const r = await this.req('/api/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: this.uid, total, sparks, speed: Math.round(curSpeed() * 10) / 10, level: G.level })
+      body: JSON.stringify({ userId: this.uid, total, sparks, speed: Math.round(curSpeed() * 10) / 10, level: G.level, collection: collection || G.collection })
     });
     if (r && r.ok && typeof r.total === 'number') {
       const banked = r.total - Math.floor(G.distance);
@@ -243,7 +243,7 @@ function commitSave() {
   const total = Math.floor(Save.data.totalDist + G.distance);
   if (total > Save.data.best) Save.data.best = total;
   Save.write();
-  Net.save(total, Save.data.sparks + G.sparks);
+  Net.save(total, Save.data.sparks + G.sparks, G.collection);
 }
 
 /* ---------- Canvas ---------- */
@@ -295,6 +295,30 @@ const BIOMES = [
 ];
 function biomeAt(level) { for (const b of BIOMES) if (level <= b.until) return b; return BIOMES[BIOMES.length - 1]; }
 
+/* ---------- Faz 3: Koleksiyon (TASARIM 4.6) + Olay motoru (TASARIM 4.5) ---------- */
+const TRINKETS = [
+  { id: 'bugday',  emoji: '🌾', name: 'Altın Buğday' },
+  { id: 'salyangoz', emoji: '🐌', name: 'Tembel Salyangoz' },
+  { id: 'kelebek', emoji: '🦋', name: 'Papatya Kelebeği' },
+  { id: 'bal',     emoji: '🍯', name: 'Bal Damlası' },
+  { id: 'elmas',   emoji: '💎', name: 'Mağara Elması' },
+  { id: 'yarasa',  emoji: '🦇', name: 'Minik Yarasa' },
+  { id: 'isilti',  emoji: '🍄', name: 'Işıltı Mantarı' },
+  { id: 'mum',     emoji: '🕯️', name: 'Kristal Mum' },
+  { id: 'balon',   emoji: '🎈', name: 'Bulut Balonu' },
+  { id: 'gokkusagi', emoji: '🌈', name: 'Mini Gökkuşağı' },
+  { id: 'can',     emoji: '🔔', name: 'Yıldız Çanı' },
+  { id: 'taci',    emoji: '👑', name: 'Bulut Tacı' },
+];
+const EVENTS = [
+  { id: 'gold',  w: 0.28, icon: '⭐', name: 'ALTIN DAKİKA',    msg: 'kıvılcımlar ×2!', dur: 60 },
+  { id: 'rain',  w: 0.24, icon: '🌠', name: 'YILDIZ YAĞMURU',  msg: 'gökten kıvılcımlar!', dur: 10 },
+  { id: 'box',   w: 0.20, icon: '🎁', name: 'UÇAN KUTU',       msg: 'önce kim alır?', dur: 12 },
+  { id: 'combo', w: 0.16, icon: '🔥', name: 'KOMBO ÇILGINLIĞI', msg: 'kombo düşmez!', dur: 15 },
+  { id: 'slow',  w: 0.12, icon: '🐌', name: 'AĞIR ZAMAN',      msg: 'her şey yavaşladı…', dur: 6 },
+];
+function trinketById(id) { return TRINKETS.find(t => t.id === id); }
+
 /* ---------- Oyun durumu ---------- */
 const G = {
   running: false,
@@ -324,6 +348,11 @@ const G = {
   tapCd: 0, magnetCd: 0, lastTapTime: 0, glanceCd: 0,
   biome: BIOMES[0],    // aktif biome (TASARIM 4.4)
   portalT: 0,          // biome geçiş portal flaşı (1.5 sn)
+  collection: {},      // 🧺 hatıra id -> 1 (sunucuda kalıcı, asla sıfırlanmaz)
+  eventTimer: 40,      // ilk dopamin olayı ~40 sn
+  activeEvent: null,   // {id, icon, name, msg, t, dur}
+  rainTimer: 0,
+  trinketNext: 300,    // ilk hatıra ~300 m'de
 };
 
 const LEVEL_LEN = 500;
@@ -547,18 +576,48 @@ function checkCollisions() {
     const passed = e.z >= 0.94 && e.z <= 1.10;
     if (!passed) continue;
 
-    const laneTol = (G.magnetTimer > 0 && e.type === 'spark') ? 9 : 0.45;
+    const pullable = e.type === 'spark' || e.type === 'trinket' || e.type === 'box';
+    const laneTol = (G.magnetTimer > 0 && pullable) ? 9 : 0.45;
     if (Math.abs(e.lane - v.lane) > laneTol) continue;
 
     if (e.type === 'spark') {
       e.taken = true;
-      G.sparks += (G.comboMultTimer > 0 ? 2 : 1);
+      const goldOn = G.activeEvent && G.activeEvent.id === 'gold';
+      G.sparks += (G.comboMultTimer > 0 ? 2 : 1) * (goldOn ? 2 : 1);
       G.combo++; G.comboTimer = 2;
       Sfx.play('collect');
       burstParticles(laneX(1, e.lane), voltY - 60 - (e.lift || 0), '#ffe27a', 6, 80);
       if (G.combo > 0 && G.combo % 10 === 0) doGlance('laugh');
       if (G.combo > 0 && G.combo % 5 === 0)
         addParticle({ x: v.x, y: voltY - 130, vx: 0, vy: -30, life: 0.9, age: 0, size: 18, color: '#7ef9ff', type: 'text', text: 'KOMBO x' + G.combo + '! ✨' });
+      continue;
+    }
+    if (e.type === 'box') {
+      e.taken = true;
+      const rw = 25 + ((Math.random() * 36) | 0);
+      G.sparks += rw;
+      burstParticles(laneX(1, e.lane), voltY - 70, '#ffd166', 16, 150);
+      addParticle({ x: v.x, y: voltY - 140, vx: 0, vy: -40, life: 1.1, age: 0, size: 21, color: '#fff', type: 'text', text: '🎁 +' + rw + ' kıvılcım!' });
+      if (Math.random() < 0.25) { G.heartTimer = 5; addParticle({ x: v.x, y: voltY - 170, vx: 0, vy: -35, life: 1.0, age: 0, size: 18, color: '#ff8fa3', type: 'text', text: '❤️ hız bonusu!' }); }
+      Sfx.play('collect');
+      continue;
+    }
+    if (e.type === 'trinket') {
+      e.taken = true;
+      const tr = trinketById(e.tid) || { emoji: '🧺', name: 'Hatıra' };
+      const isNew = !G.collection[e.tid];
+      G.collection[e.tid] = 1;
+      Save.data.collection = G.collection; Save.write();
+      if (isNew) {
+        showBanner('🧺 Yeni Hatıra: ' + tr.emoji + ' ' + tr.name + '!');
+        burstParticles(v.x, voltY - 80, '#7ef9ff', 22, 170);
+        Sfx.levelUp();
+      } else {
+        G.sparks += 15;
+        addParticle({ x: v.x, y: voltY - 130, vx: 0, vy: -35, life: 0.9, age: 0, size: 17, color: '#ffe27a', type: 'text', text: 'tekrar +15 ✨' });
+        Sfx.play('collect');
+      }
+      updateCollHUD();
       continue;
     }
     if (e.type === 'fence') { if (jumping) { e.taken = true; v.scareQueue = true; } else if (e.z > 1.0) doStumble(); continue; }
@@ -600,11 +659,46 @@ function updateProgression(distDelta) {
 /* ---------- Güncelleme ---------- */
 function update(dt) {
   G.time += dt;
+  // Olay zamanlayıcıları GERÇEK zamanla akar (slow-mo süreyi uzatmaz)
+  if (G.activeEvent) {
+    G.activeEvent.t -= dt;
+    if (G.activeEvent.t <= 0) { G.activeEvent = null; }
+  } else {
+    G.eventTimer -= dt;
+    if (G.eventTimer <= 0) {
+      G.eventTimer = rand(45, 85);
+      let r = Math.random(), ev = EVENTS[EVENTS.length - 1];
+      for (const e of EVENTS) { r -= e.w; if (r <= 0) { ev = e; break; } }
+      G.activeEvent = { id: ev.id, icon: ev.icon, name: ev.name, msg: ev.msg, t: ev.dur, dur: ev.dur };
+      showBanner(ev.icon + ' ' + ev.name + '! ' + ev.msg);
+      Sfx.play('levelUp');
+      if (ev.id === 'box')
+        G.entities.push({ type: 'box', lane: (Math.random() * 3) | 0, z: 0.02 });
+    }
+  }
+  const slowF = (G.activeEvent && G.activeEvent.id === 'slow') ? 0.7 : 1;
+  dt *= slowF;
   const spd = curSpeed();
   G.distance += spd * dt;
+  // 🌠 Yıldız Yağmuru: kıvılcım sağanağı
+  if (G.activeEvent && G.activeEvent.id === 'rain') {
+    G.rainTimer -= dt;
+    if (G.rainTimer <= 0) {
+      G.rainTimer = 0.2;
+      G.entities.push({ type: 'spark', lane: (Math.random() * 3) | 0, z: 0.02 });
+    }
+  }
+  // 🧺 Hatıra spawn (350-650 m'de bir)
+  if (G.distance >= G.trinketNext) {
+    G.trinketNext = G.distance + rand(350, 650);
+    const unowned = TRINKETS.filter(t => !G.collection[t.id]);
+    const tr = (unowned.length && Math.random() < 0.8) ? pick(unowned) : pick(TRINKETS);
+    G.entities.push({ type: 'trinket', tid: tr.id, lane: (Math.random() * 3) | 0, z: 0.02 });
+  }
   G.stumbleMult = Math.min(1, G.stumbleMult + dt * 0.15);
   if (G.burstTimer > 0) G.burstTimer -= dt;
-  if (G.comboTimer > 0) { G.comboTimer -= dt; if (G.comboTimer <= 0) G.combo = 0; }
+  const comboLocked = G.activeEvent && G.activeEvent.id === 'combo';
+  if (G.comboTimer > 0 && !comboLocked) { G.comboTimer -= dt; if (G.comboTimer <= 0) G.combo = 0; }
   if (G.heartTimer > 0) G.heartTimer -= dt;
   if (G.magnetTimer > 0) G.magnetTimer -= dt;
   if (G.comboMultTimer > 0) G.comboMultTimer -= dt;
@@ -824,6 +918,19 @@ function drawEntities() {
     const y = centerYAt(clamp(e.z, 0, 1));
     const scale = lerp(0.16, 1, t);
 
+    if (e.type === 'box' || e.type === 'trinket') {
+      const emoji = e.type === 'box' ? '🎁' : ((trinketById(e.tid) || { emoji: '🧺' }).emoji);
+      const s = 52 * scale * 1.5;
+      const bobY = Math.sin(G.time * 5 + e.z * 20) * 5 * scale;
+      ctx.save();
+      ctx.translate(x, y - 30 * scale - bobY - (e.lift || 0) * t);
+      ctx.rotate(Math.sin(G.time * 2.2 + e.z * 7) * 0.12);
+      ctx.font = '900 ' + s + 'px system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(emoji, 0, 0);
+      ctx.restore();
+      continue;
+    }
     if (e.type === 'spark') {
       const img = IMAGES.spark; if (!img || !img.width) continue;
       const s = 46 * scale * 1.6;
@@ -984,6 +1091,25 @@ function render() {
   drawVolt();
   drawParticles();
   drawBurstFx();
+  if (G.activeEvent) {   // aktif olay göstergesi (sağ üst, süre çubuklu)
+    const ev = G.activeEvent, frac = clamp(ev.t / ev.dur, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = 'rgba(20,25,50,.72)';
+    const bw = 150, bx = W - bw - 12, by = 54;
+    ctx.beginPath();
+    if (ctx.roundRect) { ctx.roundRect(bx, by, bw, 26, 13); } else { ctx.rect(bx, by, bw, 26); }
+    ctx.fill();
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath();
+    if (ctx.roundRect) { ctx.roundRect(bx + 3, by + 3, (bw - 6) * frac, 20, 10); } else { ctx.rect(bx + 3, by + 3, (bw - 6) * frac, 20); }
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = '900 15px system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(ev.icon + ' ' + Math.ceil(ev.t) + 's', bx + bw / 2, by + 14);
+    ctx.restore();
+  }
   if (G.portalT > 0) {   // biome geçiş portal flaşı (ortası en yoğun)
     const a = Math.sin((1 - G.portalT / 1.5) * Math.PI) * 0.85;
     ctx.fillStyle = `rgba(190,230,255,${a.toFixed(3)})`;
@@ -998,6 +1124,11 @@ const chipSpark = document.getElementById('chipSpark');
 const lvlfill = document.getElementById('lvlfill');
 const lvlLabel = document.getElementById('lvlLabel');
 const spdLabel = document.getElementById('spdLabel');
+function updateCollHUD() {
+  const owned = Object.keys(G.collection).length;
+  const el = document.getElementById('chipColl');
+  if (el) el.innerHTML = '🧺 <b>' + owned + '</b>/' + TRINKETS.length;
+}
 function updateHUD() {
   const total = Math.floor(Save.data.totalDist + G.distance);
   chipDist.innerHTML = '⚡ <b>' + total.toLocaleString('tr-TR') + '</b> m';
@@ -1053,6 +1184,13 @@ function startGame() {
 
   Net.load().then(rep => {
     Net.startHeartbeat();
+    if (rep && rep.collection) {
+      G.collection = Object.assign({}, G.collection, rep.collection);
+      Save.data.collection = G.collection; Save.write();
+      updateCollHUD();
+      const cl = document.getElementById('collLine');
+      if (cl) { const n = Object.keys(G.collection).length; cl.textContent = '🧺 Hatıralar: ' + n + '/' + TRINKETS.length + ' (' + Math.round(n * 100 / TRINKETS.length) + '%)'; }
+    }
     if (rep && started) showSleepReport(rep);
   });
 
@@ -1076,7 +1214,8 @@ window.addEventListener('pagehide', () => {
     if (Net.online && navigator.sendBeacon) {
       navigator.sendBeacon('/api/save', new Blob([JSON.stringify({
         userId: Net.uid, total: Math.floor(Save.data.totalDist + G.distance),
-        sparks: Save.data.sparks + G.sparks, speed: curSpeed(), level: G.level
+        sparks: Save.data.sparks + G.sparks, speed: curSpeed(), level: G.level,
+        collection: Object.assign({}, Save.data.collection, G.collection)
       })], { type: 'application/json' }));
     }
   } catch (e) {}

@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
   store.json(res, 200, {
     ok: true, serverTime: Date.now(),
     totalDist: Math.floor(u.totalDist), sparks: Math.floor(u.sparks),
-    best: Math.floor(u.best), level: u.level,
+    best: Math.floor(u.best), level: u.level, collection: u.collection || {},
     sleepGain: sleep.gain, sleptS: sleep.sleptS,
     flagged: u.flagCount > 0
   });
