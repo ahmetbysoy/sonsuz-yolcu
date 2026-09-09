@@ -1,7 +1,8 @@
 /* ============================================================
-   SONSUZ YOLCU — Faz 1+2 (v4: kukla-rig + cross-fade)
-   - VOLT: 5 parçalı skeletal animasyon (anchor-pivotlu, nötr uzuvlar)
-   - Durum geçişleri 130ms cross-fade (pop yok)
+   SONSUZ YOLCU — v11 (Faz 0-5 canlı)
+   - VOLT: 20 karelik koşu sheet'i + jump/slide/stumble/cheer aksiyon sheet'leri
+     + alev kuyruk overlay + 6 mimik (lookback duygu yüzleri) + Türkçe TTS replikler
+   - Dünya: 3 biome + 5 katman parallax + S-kıvrımlı yol + olay motoru + koleksiyon
    - Net modülü (Firebase sunucu senkronu + uyku kazancı raporu)
    ============================================================ */
 (() => {
@@ -102,8 +103,11 @@ function drawActionSheet(state, alpha) {
   if (!sheet || !sheet.width || !sheet.height) return false;   // fallback: eski statik poz
   let p = state === 'jump' ? v.jumpT : v.stateT / cfg.dur;
   p = clamp(p, 0, 1);
-  const fi = Math.min(cfg.n - 1, Math.floor((cfg.ease ? cfg.ease(p) : p) * cfg.n));
-  const fw = sheet.width / cfg.n, fh = sheet.height;
+  let fi = Math.min(cfg.n - 1, Math.floor((cfg.ease ? cfg.ease(p) : p) * cfg.n));
+  const fw = Math.floor(sheet.width / cfg.n), fh = sheet.height;
+  if (fw < 8 || fh < 8) return false;   // bozuk/eksik asset -> eski statik poz
+  if ((fi + 1) * fw > sheet.width + 2) fi = 0;   // kaynak taşma sigortası (runSheet cols dersi)
+  if (fw < 8 || fh < 8) return false;   // bozuk/eksik asset -> eski statik poz
   const scale = (H * cfg.charH) / (fh * cfg.cellFrac);
   const dw = fw * scale, dh = fh * scale;
   const jt = Math.min(v.jumpT, 1);
@@ -140,7 +144,7 @@ const Sfx = {
     if (!this.ctx || this.muted) return;
     const t0 = this.ctx.currentTime;
     const osc = this.ctx.createOscillator(), g = this.ctx.createGain();
-    osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+    osc.type = type; osc.frequency.setValueAtTime(freq * (1 + (Math.random() - 0.5) * 0.07), t0);   // organik detune
     if (slideTo) osc.frequency.linearRampToValueAtTime(slideTo, t0 + dur);
     g.gain.setValueAtTime(gain, t0);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
@@ -530,7 +534,7 @@ function drawFlame() {
   const w = fw * h / fh;
   const jumping = v.state === 'jump';
   const jt = Math.min(v.jumpT || 0, 1);
-  const laneLean = clamp((v.targetLane - v.lane) * -0.18, -0.25, 0.25);
+  const laneLean = clamp((v.targetLane - v.lane) * -0.32, -0.42, 0.42);
   const x = v.x - w * 0.55 - 6;
   const y = voltY + 2 - h * 0.55 + (jumping ? Math.sin(jt * Math.PI) * 12 : 0);
   const rot = -laneLean * 1.4 + (jumping ? Math.sin(jt * Math.PI) * 0.3 : 0);
@@ -557,7 +561,8 @@ function autopilot(dt) {
   }
   if (!target) return;
 
-  const reactZ = 0.38 + Math.random() * 0.04;
+  const spdNow = curSpeed();
+  const reactZ = clamp(spdNow * 0.042 * (0.7 + Math.random() * 0.25), 0.12, 0.55);   // sabit ~0.7-0.95 sn tepki süresi
   if (target.z > reactZ) return;
 
   if (target.type === 'fence') doJump();
@@ -731,7 +736,15 @@ function update(dt) {
   const v = G.volt;
   v.lane = lerp(v.lane, v.targetLane, clamp(dt * 6.5, 0, 1));
   v.stateT += dt;
-  if (v.state === 'jump') { v.jumpT = v.stateT / 0.55; if (v.stateT >= 0.55) { setVoltState('run'); if (v.scareQueue) { v.scareQueue = false; doGlance('scared'); } } }
+  if (v.state === 'jump') {
+    v.jumpT = v.stateT / 0.55;
+    if (v.stateT >= 0.55) {
+      setVoltState('run');
+      burstParticles(v.x, voltY + 4, '#d9c9a8', 8, 90);            // iniş tozu
+      G.shake = Math.max(G.shake, 0.12);                            // zemine değme hissi
+      if (v.scareQueue) { v.scareQueue = false; doGlance('scared'); }
+    }
+  }
   else if (v.state === 'slide' && v.stateT >= 0.6) { setVoltState('run'); if (v.laughQueue) { v.laughQueue = false; doGlance('laugh'); } }
   else if (v.state === 'stumble' && v.stateT >= 0.8) setVoltState('lookback');
   else if (v.state === 'lookback' && v.stateT >= 0.45) { v.glanceFace = null; setVoltState('run'); }
@@ -987,9 +1000,10 @@ function drawRunFrame(px, baseY, alpha) {
 
   // adım fazıyla senkron squash&stretch (S: faz; vuruş anında çökme)
   const S = Math.sin(v.runPhase * fps);
-  const dispH = H * 0.175 * (1 - Math.abs(S) * 0.05);
+  const dispH = H * 0.175 * (1 - Math.abs(S) * 0.085);
   const dispW = dispH * (SHEET.fw / SHEET.fh);
-  let laneLean = clamp((v.targetLane - v.lane) * -0.18, -0.25, 0.25);
+  let laneLean = clamp((v.targetLane - v.lane) * -0.32, -0.42, 0.42)
+    + Math.sin(G.time * 13) * Math.min(0.05, Math.abs(v.targetLane - v.lane) * 0.07);   // inertia: geçişte yaylanma
   if (G.driftT > 0) laneLean += Math.sin((1 - G.driftT / 0.45) * Math.PI) * 0.9;
 
   ctx.fillStyle = 'rgba(40,30,10,0.22)';
@@ -999,8 +1013,8 @@ function drawRunFrame(px, baseY, alpha) {
 
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.translate(px, baseY);
-  ctx.rotate(laneLean);
+  ctx.translate(px, baseY + v.bob * 0.6);                 // organik bob: kare kadansına ek yumuşak dalga
+  ctx.rotate(laneLean + Math.sin(G.time * 0.9) * 0.012);  // sürekli mikro 'nefes' (arkadan görünüm)
   // taban-orta çapa: ayaklar zemin çizgisinde
   ctx.drawImage(sheet, sx, sy, SHEET.fw, SHEET.fh, -dispW / 2, -dispH, dispW, dispH);
   ctx.restore();

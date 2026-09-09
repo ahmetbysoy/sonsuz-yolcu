@@ -89,12 +89,12 @@ Repo: monorepo (/client /server /docs /assets /tools)
 ## BÖLÜM 7 — Faz Planı
 | Faz | İçerik | Durum |
 |---|---|---|
-| 0 | Kurulum + Telegram bağlantısı + docs | 🟡 (docs ✅, BotFather ⏳) |
+| 0 | Kurulum + Telegram bağlantısı + docs | ✅ (@sonsuzyolcu_bot canlı) |
 | 1 | Oto-Koşucu MVP | ✅ (duman testi 18k kare, 0 hata) |
 | 2 | Kayıt + Uyku Kazancı (sunucu) | ✅ (API testleri geçti) |
-| 3 | Biomlar + Olaylar + Koleksiyon | ⏳ |
-| 4 | TTS + Kişilik + Replikler | ⏳ |
-| 5 | Dokunmatik Şov + Sesli Komutlar | ⏳ |
+| 3 | Biomlar + Olaylar + Koleksiyon | ✅ (v10: 3 biome + 5 olay + 12 hatıra, sunucuda merge) |
+| 4 | TTS + Kişilik + Replikler | ✅ (v11: VoltSpeak tr-TR + lookback duygu senkronu) |
+| 5 | Dokunmatik Şov + Sesli Komutlar | 🟨 (v8a bonus dokunuşlar + v11 sesli komut/fallback; cihaz sallama yok) |
 | 6 | Ligler + Sıralama + Hayalet Rakip | ⏳ |
 | 7 | Yükseltme + Petler + Kostümler | ⏳ |
 | 8 | Görevler + Sandıklar + Bildirimler | ⏳ |
