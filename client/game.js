@@ -255,14 +255,16 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let W = 0, H = 0, DPR = 1;
 let horizonY = 0, voltY = 0, roadHalfBottom = 0, roadHalfHorizon = 0;
+let horizonBase = 0, voltBase = 0;   // tepe-vadi: sabit tabanlar, horizonY/voltY araziyle oynar
 
 function resize() {
   DPR = clamp(window.devicePixelRatio || 1, 1, 2);
   W = window.innerWidth; H = window.innerHeight;
   canvas.width = W * DPR; canvas.height = H * DPR;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  horizonY = H * 0.42;
-  voltY = H * 0.80;
+  horizonBase = H * 0.42;
+  voltBase = H * 0.80;
+  horizonY = horizonBase; voltY = voltBase;
   roadHalfBottom = W * 0.46;
   roadHalfHorizon = W * 0.105;
 }
@@ -356,6 +358,7 @@ const G = {
   eventTimer: 40,      // ilk dopamin olayı ~40 sn
   activeEvent: null,   // {id, icon, name, msg, t, dur}
   rainTimer: 0,
+  elev: 0,             // tepe-vadi arazi değeri (-1..1)
   trinketNext: 300,    // ilk hatıra ~300 m'de
 };
 
@@ -682,6 +685,12 @@ function updateProgression(distDelta) {
 /* ---------- Güncelleme ---------- */
 function update(dt) {
   G.time += dt;
+  // TEPE-VADİ: arazi dalgası — kamera dikey takip + dikey parallax
+  // (uzak zemin az oynar, yakın zemin tam oynar -> tırmanma/iniş hissi; çarpışma matematiği değişmez)
+  G.elev = Math.sin(G.distance * 0.012) * 0.55 + Math.sin(G.distance * 0.003 + 2) * 0.45;
+  const camY = G.elev * H * 0.045;
+  horizonY = horizonBase + camY * 0.35;
+  voltY = voltBase + camY;
   // Olay zamanlayıcıları GERÇEK zamanla akar (slow-mo süreyi uzatmaz)
   if (G.activeEvent) {
     G.activeEvent.t -= dt;
