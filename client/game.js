@@ -84,7 +84,7 @@ function loadImages(cb) {
 
 /* ---------- RUN SHEET (12 karelik koşu döngüsü) ----------
    tools/pack_run_sheet.py üretimi — detaylar: docs/volt_run_sheet.json */
-const SHEET = { cols: 10, rows: 1, count: 20, fw: 207, fh: 271, fpsBase: 21.7 };  // 20 kare = 12'nin iki katı akıcılık
+const SHEET = { cols: 20, rows: 1, count: 20, fw: 207, fh: 271, fpsBase: 21.7 };  // TEK ŞERİT: 20 kolon (cols=10 hatası düzeltildi — kare 10-19 boşa düşüyordu)
 
 // Aksiyon sheet'leri: her durum artık gerçek kare animasyon (statik sticker YOK)
 const ACTION_SHEETS = {
@@ -982,7 +982,8 @@ function drawRunFrame(px, baseY, alpha) {
   const fps = clamp(SHEET.fpsBase * spd, 24, 35);
   const fi = Math.floor(v.runPhase * fps) % SHEET.count;
   const col = fi % SHEET.cols, row = (fi / SHEET.cols) | 0;
-  const sx = col * SHEET.fw, sy = row * SHEET.fh;
+  let sx = col * SHEET.fw, sy = row * SHEET.fh;
+  if (sheet.height && sy + SHEET.fh > sheet.height) { sy = 0; sx = (fi % SHEET.count) * SHEET.fw; }   // sigorta: sheet uyumsuzluğunda VOLT asla kaybolmaz
 
   // adım fazıyla senkron squash&stretch (S: faz; vuruş anında çökme)
   const S = Math.sin(v.runPhase * fps);
